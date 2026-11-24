@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Player Lookup — Free Fire UID info</title>
+<meta name="description" content="Look up any Free Fire player by UID: name, level, rank, clan, avatar, banner and outfits. Region is detected automatically.">
+<meta name="theme-color" content="#E6EAEE">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23121C33'/%3E%3Cpath d='M9 22V10h6.5a3.5 3.5 0 0 1 0 7H12' fill='none' stroke='%23FF5A1F' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#E6EAEE; --paper:#FAFBFC; --ink:#121C33; --steel:#59687A; --line:#C9D1D9;
+  --signal:#E8480F; --signal-ink:#FFFFFF; --wash:#EFF2F5; --focus:#1B5FD6;
+  --display:"Big Shoulders Display","Arial Narrow","Helvetica Neue",Arial,sans-serif;
+  --body:"Public Sans",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+  --code:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+:root[data-theme="dark"]{
+  --bg:#0E1524; --paper:#151F34; --ink:#E9EEF6; --steel:#98A6BA; --line:#2A3752;
+  --signal:#FF6A2B; --signal-ink:#1A0B03; --wash:#1B2740; --focus:#7AA7FF;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E1524; --paper:#151F34; --ink:#E9EEF6; --steel:#98A6BA; --line:#2A3752;
+    --signal:#FF6A2B; --signal-ink:#1A0B03; --wash:#1B2740; --focus:#7AA7FF;
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.55 var(--body);min-height:100vh}
+a{color:inherit}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.wrap{width:min(960px,100% - 32px);margin-inline:auto}
+
+/* top bar */
+.top{display:flex;align-items:center;justify-content:space-between;padding:18px 0}
+.brand{display:flex;align-items:center;gap:10px;font:800 24px/1 var(--display);letter-spacing:.01em;text-decoration:none}
+.brand i{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;background:var(--ink);color:var(--signal)}
+.top nav{display:flex;gap:6px;align-items:center}
+.top nav a,.top nav button{border:0;background:none;padding:8px 10px;border-radius:8px;color:var(--steel);text-decoration:none;cursor:pointer;font-size:15px}
+.top nav a:hover,.top nav button:hover{color:var(--ink);background:var(--wash)}
+
+/* ask */
+.ask{padding:34px 0 26px}
+h1{margin:0;font:800 clamp(44px,8.5vw,84px)/.92 var(--display);letter-spacing:.005em;max-width:12ch}
+.lede{margin:14px 0 22px;color:var(--steel);max-width:46ch}
+.form{display:flex;gap:10px;max-width:620px}
+.field{flex:1;display:flex;align-items:center;background:var(--paper);border:2px solid var(--ink);border-radius:12px;padding:0 6px 0 14px;min-width:0}
+.field:focus-within{outline:3px solid var(--focus);outline-offset:2px}
+.field label{color:var(--steel);font-size:14px;margin-right:10px;white-space:nowrap}
+.field input{flex:1;min-width:0;border:0;background:none;padding:15px 4px;font:600 22px/1 var(--body);letter-spacing:.03em;outline:none}
+.field input::placeholder{color:var(--line);font-weight:500}
+.go{border:0;border-radius:12px;background:var(--ink);color:var(--paper);padding:0 26px;font-weight:600;cursor:pointer;min-height:56px}
+.go:hover{background:var(--signal);color:var(--signal-ink)}
+.go[disabled]{opacity:.55;cursor:progress}
+.recent{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;min-height:30px;align-items:center;color:var(--steel);font-size:14px}
+.recent button{border:1px solid var(--line);background:var(--paper);border-radius:999px;padding:3px 12px;cursor:pointer;font-size:14px}
+.recent button:hover{border-color:var(--ink)}
+
+/* states */
+.state{border:1px dashed var(--line);border-radius:14px;padding:22px;background:var(--paper);max-width:620px}
+.state b{display:block;margin-bottom:4px}
+.state p{margin:0;color:var(--steel)}
+.state.err{border-style:solid;border-color:var(--signal)}
+.skel{background:var(--paper);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.skel .s-ban{height:150px;background:var(--wash)}
+.skel .s-body{padding:22px}
+.skel .s-line{height:14px;border-radius:7px;background:var(--wash);margin:12px 0}
+.skel p{margin:0;color:var(--steel);font-size:14px;padding:0 22px 22px}
+@media (prefers-reduced-motion:no-preference){.skel .s-ban,.skel .s-line{animation:pulse 1.4s ease-in-out infinite}}
+@keyframes pulse{50%{opacity:.5}}
+
+/* id card */
+.card{background:var(--paper);border:2px solid var(--ink);border-radius:20px;overflow:hidden;margin-bottom:28px}
+.photo{position:relative;aspect-ratio:16/5;min-height:130px;background:linear-gradient(120deg,var(--ink),#33466F);overflow:hidden}
+.photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.photo::after{content:"";position:absolute;inset:auto 0 0 0;height:45%;background:linear-gradient(transparent,rgba(10,16,30,.45))}
+.head{position:relative;display:grid;grid-template-columns:auto 1fr auto;gap:20px;align-items:start;padding:0 24px 22px;border-bottom:2px dashed var(--line)}
+.avatar{width:112px;height:112px;margin-top:-56px;border-radius:18px;border:4px solid var(--paper);background:var(--wash);overflow:hidden;position:relative;z-index:1;display:grid;place-items:center;font:800 44px var(--display);color:var(--steel)}
+.avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.who{padding-top:14px;min-width:0}
+.name{margin:0;font:800 clamp(34px,6vw,56px)/1 var(--display);letter-spacing:.01em;overflow-wrap:anywhere}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--wash);border-radius:8px;padding:3px 10px;font-size:14px;color:var(--steel)}
+.chip b{color:var(--ink);font-weight:600}
+button.chip{cursor:pointer}
+button.chip:hover{border-color:var(--ink)}
+.stamp{align-self:start;margin-top:18px;border:3px solid var(--signal);color:var(--signal);border-radius:12px;padding:6px 16px 8px;text-align:center;transform:rotate(-5deg);font:800 15px/1 var(--display);letter-spacing:.08em}
+.stamp strong{display:block;font:800 52px/.95 var(--display);letter-spacing:0}
+@media (prefers-reduced-motion:no-preference){.stamp{animation:slam .5s cubic-bezier(.2,1.4,.4,1) .15s both}}
+@keyframes slam{from{opacity:0;transform:rotate(-14deg) scale(1.9)}to{opacity:1;transform:rotate(-5deg) scale(1)}}
+.sig{margin:0;padding:16px 24px 0;color:var(--steel);font-style:italic;overflow-wrap:anywhere}
+.ledger{display:grid;grid-template-columns:repeat(2,1fr);column-gap:36px;margin:0;padding:10px 24px 8px}
+.ledger div{display:flex;justify-content:space-between;gap:16px;padding:11px 0;border-bottom:1px solid var(--line)}
+.ledger dt{color:var(--steel)}
+.ledger dd{margin:0;font-weight:600;text-align:right;overflow-wrap:anywhere}
+.tags{display:flex;flex-wrap:wrap;gap:8px;padding:12px 24px 0}
+.tags span{border:1px solid var(--line);border-radius:999px;padding:2px 12px;font-size:14px}
+.items{padding:16px 24px 0}
+.items h2,.api h2{margin:0 0 10px;font:700 24px/1 var(--display);letter-spacing:.02em}
+.row{display:flex;flex-wrap:wrap;gap:10px}
+.tile{width:72px;height:72px;border-radius:12px;border:1px solid var(--line);background:var(--wash);overflow:hidden;display:grid;place-items:center;font-size:11px;color:var(--steel);text-align:center}
+.tile img{width:100%;height:100%;object-fit:contain}
+.foot{display:flex;flex-wrap:wrap;gap:10px;padding:20px 24px 24px}
+.btn{border:2px solid var(--ink);background:none;border-radius:10px;padding:9px 16px;font-weight:600;cursor:pointer}
+.btn:hover{background:var(--ink);color:var(--paper)}
+.btn.solid{background:var(--ink);color:var(--paper)}
+.btn.solid:hover{background:var(--signal);border-color:var(--signal);color:var(--signal-ink)}
+
+/* api */
+.api{padding:20px 0 56px}
+.api p{color:var(--steel);max-width:60ch;margin:0 0 14px}
+.code{display:flex;align-items:center;gap:10px;background:var(--ink);color:var(--paper);border-radius:12px;padding:12px 12px 12px 16px;font:500 14px/1.4 var(--code);margin-bottom:10px}
+.code span{flex:1;min-width:0;overflow-wrap:anywhere}
+.code button{border:0;border-radius:8px;background:rgba(255,255,255,.14);color:inherit;padding:6px 12px;cursor:pointer;font:500 13px var(--body)}
+.code button:hover{background:var(--signal);color:var(--signal-ink)}
+pre.sample{margin:10px 0 0;padding:16px;border-radius:12px;background:var(--paper);border:1px solid var(--line);overflow:auto;font:400 13px/1.5 var(--code);color:var(--ink)}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:10px 18px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.on{opacity:1}
+footer{padding:0 0 40px;color:var(--steel);font-size:13px}
+
+@media (max-width:680px){
+  .head{grid-template-columns:auto 1fr;padding:0 16px 18px}
+  .stamp{grid-column:1/-1;justify-self:start;margin-top:0;display:flex;align-items:baseline;gap:10px;padding:4px 14px;transform:rotate(-3deg)}
+  .stamp strong{font-size:36px}
+  .avatar{width:88px;height:88px;margin-top:-44px}
+  .ledger{grid-template-columns:1fr;padding:6px 16px}
+  .sig,.tags,.items,.foot{padding-left:16px;padding-right:16px}
+  .form{flex-direction:column}
+  .go{min-height:52px}
+  .field label{display:none}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="/" aria-label="Player Lookup home"><i aria-hidden="true">
+      <svg width="18" height="18" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 25V8h8.5a4.5 4.5 0 0 1 0 9H12"/></svg></i>Player Lookup</a>
+    <nav aria-label="Main">
+      <a href="#api">API</a>
+      <button type="button" id="themeBtn" aria-label="Switch light or dark theme">Theme</button>
+    </nav>
+  </header>
+
+  <main>
+    <section class="ask" aria-labelledby="h1">
+      <h1 id="h1">Look up a Free Fire player</h1>
+      <p class="lede">Enter a UID to see name, level, rank, clan and outfit. The server region is found for you.</p>
+      <form class="form" id="form" autocomplete="off">
+        <div class="field">
+          <label for="uid">Player UID</label>
+          <input id="uid" name="uid" inputmode="numeric" pattern="[0-9]*" maxlength="14" placeholder="e.g. 1234567890" required>
+        </div>
+        <button class="go" id="go" type="submit">Look up</button>
+      </form>
+      <div class="recent" id="recent" aria-label="Recent searches"></div>
+    </section>
+
+    <section id="out" aria-live="polite" aria-busy="false"></section>
+
+    <section class="api" id="api" aria-labelledby="apiH">
+      <h2 id="apiH">Use it as an API</h2>
+      <p>One request, one UID. The answer is JSON with the player's details and ready-to-use image links for avatar, banner and outfits.</p>
+      <div class="code"><span id="apiUrl">/info?uid=1234567890</span><button type="button" data-copy="apiUrl">Copy</button></div>
+      <pre class="sample" id="sample">{
+  "status": "success",
+  "nickname": "…",
+  "uid": "1234567890",
+  "region": "…",
+  "level": 0,
+  "likes": 0,
+  "avatar_url": "https://getitems.thug4ff.xyz/item?id=…",
+  "banner_url": "https://getitems.thug4ff.xyz/item?id=…",
+  "…": "more fields"
+}</pre>
+    </section>
+  </main>
+  <footer>Unofficial tool. Not affiliated with Garena or Free Fire.</footer>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function(){
+'use strict';
+var $=function(s,r){return (r||document).querySelector(s)};
+var out=$('#out'), form=$('#form'), uidEl=$('#uid'), goBtn=$('#go'), recentEl=$('#recent'), toastEl=$('#toast');
+var ITEM='/api/item?id=';
+var lastData=null, busy=false;
+
+/* ---- tiny DOM helper: text only, never innerHTML with data ---- */
+function h(tag,props,kids){
+  var el=document.createElement(tag);
+  if(props){for(var k in props){
+    var v=props[k]; if(v==null||v===false)continue;
+    if(k==='class')el.className=v;
+    else if(k==='text')el.textContent=v;
+    else if(k.slice(0,2)==='on')el.addEventListener(k.slice(2),v);
+    else el.setAttribute(k,v===true?'':v);
+  }}
+  (kids||[]).forEach(function(c){ if(c==null||c===false)return; el.appendChild(typeof c==='string'?document.createTextNode(c):c); });
+  return el;
+}
+function num(n){ n=Number(n); return isFinite(n)?n.toLocaleString('en-US'):String(n); }
+function toast(msg){ toastEl.textContent=msg; toastEl.classList.add('on'); clearTimeout(toast.t); toast.t=setTimeout(function(){toastEl.classList.remove('on')},1800); }
+function copy(text,msg){
+  function done(){toast(msg||'Copied')}
+  try{ if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(done,fallback);return} }catch(e){}
+  fallback();
+  function fallback(){
+    try{var t=h('textarea',{style:'position:fixed;opacity:0'});t.value=text;document.body.appendChild(t);t.select();document.execCommand('copy');t.remove();done()}
+    catch(e){toast('Copy failed')}
+  }
+}
+
+/* ---- theme ---- */
+function applyTheme(t){ if(t)document.documentElement.setAttribute('data-theme',t); }
+try{ applyTheme(localStorage.getItem('pl-theme')); }catch(e){}
+$('#themeBtn').addEventListener('click',function(){
+  var cur=document.documentElement.getAttribute('data-theme');
+  if(!cur) cur=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+  var next=cur==='dark'?'light':'dark'; applyTheme(next);
+  try{localStorage.setItem('pl-theme',next)}catch(e){}
+});
+
+/* ---- recent searches ---- */
+function getRecent(){ try{return JSON.parse(localStorage.getItem('pl-recent')||'[]').filter(function(x){return x&&x.uid})}catch(e){return []} }
+function saveRecent(uid,name){
+  var list=getRecent().filter(function(x){return x.uid!==uid});
+  list.unshift({uid:uid,name:name}); list=list.slice(0,5);
+  try{localStorage.setItem('pl-recent',JSON.stringify(list))}catch(e){}
+  renderRecent();
+}
+function renderRecent(){
+  recentEl.textContent='';
+  var list=getRecent(); if(!list.length)return;
+  recentEl.appendChild(h('span',{text:'Recent:'}));
+  list.forEach(function(x){
+    recentEl.appendChild(h('button',{type:'button',title:'UID '+x.uid,onclick:function(){uidEl.value=x.uid;search(x.uid)},text:x.name||x.uid}));
+  });
+}
+
+/* ---- images with graceful fallback ---- */
+function img(id,alt,onfail){
+  var i=h('img',{src:ITEM+encodeURIComponent(id),alt:alt||'',loading:'lazy',decoding:'async'});
+  i.addEventListener('error',function(){ i.remove(); if(onfail)onfail(); });
+  return i;
+}
+function tile(id,label){
+  var t=h('div',{class:'tile',title:label+' '+id});
+  t.appendChild(img(id,label,function(){ t.textContent=String(id); }));
+  return t;
+}
+
+/* ---- states ---- */
+function showLoading(uid){
+  out.setAttribute('aria-busy','true'); out.textContent='';
+  out.appendChild(h('div',{class:'skel'},[
+    h('div',{class:'s-ban'}),
+    h('div',{class:'s-body'},[h('div',{class:'s-line',style:'width:40%;height:26px'}),h('div',{class:'s-line',style:'width:70%'}),h('div',{class:'s-line',style:'width:55%'})]),
+    h('p',{text:'Checking regions for UID '+uid+'. The first lookup can take up to 20 seconds.'})
+  ]));
+}
+function showError(msg,hint){
+  out.setAttribute('aria-busy','false'); out.textContent='';
+  out.appendChild(h('div',{class:'state err',role:'alert'},[h('b',{text:msg}),hint?h('p',{text:hint}):null]));
+}
+
+/* ---- result card ---- */
+function row(label,value){ return (value===''||value==null||value===0&&label!=='Likes')?null:h('div',null,[h('dt',{text:label}),h('dd',{text:String(value)})]); }
+
+function render(d){
+  lastData=d; out.setAttribute('aria-busy','false'); out.textContent='';
+  var name=d.nickname||'Unknown';
+
+  var photo=h('div',{class:'photo'});
+  if(d.banner_id) photo.appendChild(img(d.banner_id,'Banner of '+name));
+
+  var avatar=h('div',{class:'avatar'});
+  var initial=h('span',{text:name.trim().charAt(0).toUpperCase()||'?','aria-hidden':'true'});
+  if(d.avatar_id) avatar.appendChild(img(d.avatar_id,'Avatar of '+name,function(){avatar.appendChild(initial)})); else avatar.appendChild(initial);
+
+  var chips=[
+    h('button',{type:'button',class:'chip',title:'Copy UID',onclick:function(){copy(String(d.uid),'UID copied')}},['UID ',h('b',{text:String(d.uid)})]),
+    d.region?h('span',{class:'chip'},['Region ',h('b',{text:d.region})]):null,
+    d.clan_name&&d.clan_name!=='No Clan'?h('span',{class:'chip'},['Clan ',h('b',{text:d.clan_name})]):null,
+    d.has_elite_pass?h('span',{class:'chip'},[h('b',{text:'Elite Pass'})]):null
+  ];
+
+  var head=h('div',{class:'head'},[
+    avatar,
+    h('div',{class:'who'},[h('h2',{class:'name',text:name}),h('div',{class:'chips'},chips)]),
+    h('div',{class:'stamp','aria-label':'Level '+d.level},['LEVEL',h('strong',{text:String(d.level||0)})])
+  ]);
+
+  var br=d.br_rank?(d.br_rank+(d.br_points?'  ·  '+num(d.br_points)+' pts':'')):'';
+  var cs=d.cs_rank?(d.cs_rank+(d.cs_points?'  ·  '+num(d.cs_points)+' pts':'')):'';
+  var clanBits=d.clan?[d.clan.level?'Lv '+d.clan.level:'',d.clan.members?d.clan.members+'/'+(d.clan.capacity||'?')+' members':''].filter(Boolean).join('  ·  '):'';
+  var rows=[
+    row('Battle Royale rank',br), row('Clash Squad rank',cs),
+    row('Highest BR rank',d.max_rank?d.max_rank+(d.max_points?'  ·  '+num(d.max_points)+' pts':''):''),
+    row('Highest CS rank',d.cs_max_rank||''),
+    row('Likes',num(d.likes||0)), row('Experience',d.exp?num(d.exp):''),
+    row('Credit score',d.credit_score||''), row('Diamonds spent',d.diamond_cost?num(d.diamond_cost):''),
+    row('Prime level',d.prime_level||''), row('Clan details',clanBits),
+    row('Pet',d.pet?(d.pet.name||'Pet')+(d.pet.level?'  ·  Lv '+d.pet.level:''):''),
+    row('Gender',d.gender), row('Language',d.language), row('Plays',d.mode_prefer),
+    row('Online',d.time_online), row('Active',d.time_active),
+    row('Account created',d.created_at&&d.created_at!=='Unknown'?d.created_at:''), row('Last login',d.last_login),
+    row('Game version',d.release_version)
+  ].filter(Boolean);
+
+  var tags=(d.battle_tags||[]).concat(d.social_tags||[]);
+  var kids=[photo,head];
+  if(d.signature) kids.push(h('p',{class:'sig',text:'“'+d.signature+'”'}));
+  if(rows.length) kids.push(h('dl',{class:'ledger'},rows));
+  if(tags.length) kids.push(h('div',{class:'tags'},tags.map(function(t){return h('span',{text:t})})));
+  if((d.outfits||[]).length) kids.push(h('div',{class:'items'},[h('h2',{text:'Outfit'}),h('div',{class:'row'},d.outfits.map(function(o){return tile(o.id,'Outfit')}))]));
+  if((d.weapon_skins||[]).length) kids.push(h('div',{class:'items'},[h('h2',{text:'Weapon skins'}),h('div',{class:'row'},d.weapon_skins.map(function(o){return tile(o.id,'Weapon skin')}))]));
+
+  var link=location.origin+'/info?uid='+d.uid;
+  kids.push(h('div',{class:'foot'},[
+    h('button',{type:'button',class:'btn solid',onclick:function(){copy(link,'API link copied')}},['Copy API link']),
+    h('button',{type:'button',class:'btn',onclick:function(){copy(JSON.stringify(lastData,null,2),'JSON copied')}},['Copy JSON']),
+    h('button',{type:'button',class:'btn',onclick:function(){copy(location.origin+'/?uid='+d.uid,'Page link copied')}},['Share this page'])
+  ]));
+
+  var card=h('article',{class:'card','aria-label':'Player '+name},kids);
+  out.appendChild(card);
+  try{ card.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'nearest'}); }catch(e){}
+}
+
+/* ---- search ---- */
+function search(uid){
+  uid=String(uid||'').replace(/\D/g,'');
+  if(uid.length<5){ showError('Enter a valid UID','A UID is a number with 5 to 14 digits.'); uidEl.focus(); return; }
+  if(busy)return; busy=true; goBtn.disabled=true; goBtn.textContent='Searching…';
+  try{ history.replaceState(null,'','?uid='+uid); }catch(e){}
+  $('#apiUrl').textContent=location.origin+'/info?uid='+uid;
+  showLoading(uid);
+  var ctl=('AbortController' in window)?new AbortController():null;
+  var timer=setTimeout(function(){ if(ctl)ctl.abort(); },40000);
+  fetch('/info?uid='+encodeURIComponent(uid),{headers:{Accept:'application/json'},signal:ctl?ctl.signal:undefined})
+    .then(function(r){ return r.json().catch(function(){return {status:'error',error:'The server sent an unreadable answer.'}}).then(function(j){return {r:r,j:j}}); })
+    .then(function(x){
+      if(x.r.ok&&x.j.status==='success'){ render(x.j); saveRecent(String(x.j.uid),x.j.nickname); }
+      else if(x.r.status===404) showError('Player not found','Check the UID for typos. Only UIDs from regions this tool can reach are found.');
+      else if(x.r.status===429) showError(x.j.error||'Too many requests','Wait a minute and try again.');
+      else showError(x.j.error||'Lookup failed','The game server did not answer. Try again in a moment.');
+    })
+    .catch(function(e){
+      showError(e&&e.name==='AbortError'?'The lookup took too long':'Could not reach the server','Check your connection and try again.');
+    })
+    .then(function(){ clearTimeout(timer); busy=false; goBtn.disabled=false; goBtn.textContent='Look up'; out.setAttribute('aria-busy','false'); });
+}
+
+form.addEventListener('submit',function(e){ e.preventDefault(); search(uidEl.value); });
+uidEl.addEventListener('input',function(){ uidEl.value=uidEl.value.replace(/\D/g,''); });
+document.addEventListener('click',function(e){
+  var b=e.target.closest&&e.target.closest('[data-copy]'); if(!b)return;
+  copy($('#'+b.getAttribute('data-copy')).textContent,'Copied');
+});
+
+$('#apiUrl').textContent=location.origin+'/info?uid=1234567890';
+renderRecent();
+var q=new URLSearchParams(location.search).get('uid');
+if(q&&/^\d{5,14}$/.test(q)){ uidEl.value=q; search(q); }
+})();
+</script>
+</body>
+</html>
