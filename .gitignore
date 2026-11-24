@@ -1,0 +1,7 @@
+.env
+.env.*
+accounts.json
+__pycache__/
+*.pyc
+.vercel
+node_modules
