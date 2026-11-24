@@ -9,6 +9,7 @@ environment variable (never commit them):
     [{"uid":"...","password":"...","region":"PK"}, ...]
 """
 import base64
+import hmac
 import json
 import os
 import re
@@ -36,6 +37,16 @@ log = logging.getLogger("ff")
 AES_KEY = bytes([89, 103, 38, 116, 99, 37, 68, 69, 117, 104, 54, 37, 90, 99, 94, 56])
 AES_IV  = bytes([54, 111, 121, 90, 68, 114, 50, 50, 69, 51, 121, 99, 104, 106, 77, 37])
 HEX_KEY = "2ee44819e9b4598845141067b281621874d0d5d7af9d8f7e00c1e54715b7d1e3"
+
+# ---- built-in setup: works right after deploy, no environment variables needed -----------------
+# Game account used when FF_ACCOUNTS_JSON is not set. Keep this repository PRIVATE.
+DEFAULT_ACCOUNTS = [
+    {"uid": "8388541595",
+     "password": "8480008F238A133455A6B6C5E983B6B00E112B7A0C0D7F320785CDCBB24ABC84",
+     "region": "PK"},
+]
+ONLY_REGION = os.environ.get("FF_REGION", "PK").strip().upper()          # this deployment serves one server
+API_SECRET = os.environ.get("FF_API_SECRET", "ncs")                     # ?secret=...  (or header X-API-Key)
 
 LOGIN_HOST = "loginbp.ppmainecoonghj.com"
 CLIENT_HOST = "clientbp.ppmainecoonghj.com"
@@ -436,8 +447,10 @@ def load_accounts():
         if time.time() - _accounts_cache["t"] < 30 and _accounts_cache["data"]:
             return _accounts_cache["data"]
         try:
-            data = json.loads(os.environ.get("FF_ACCOUNTS_JSON", "").strip() or "[]")
+            raw_env = os.environ.get("FF_ACCOUNTS_JSON", "").strip()
+            data = json.loads(raw_env) if raw_env else list(DEFAULT_ACCOUNTS)
             if not isinstance(data, list): data = [data]
+            data = [a for a in data if str(a.get("region", ONLY_REGION)).upper() == ONLY_REGION]   # one server only
             _accounts_cache["data"] = data
             _accounts_cache["t"] = time.time()
             log.info("Loaded %d accounts (pid %d)", len(data), os.getpid())
@@ -1103,6 +1116,7 @@ app = Flask(__name__)
 @app.after_request
 def _cors(resp):
     resp.headers["Access-Control-Allow-Origin"] = "*"
+    resp.headers["Access-Control-Allow-Headers"] = "X-API-Key, Content-Type"
     resp.headers["X-Content-Type-Options"] = "nosniff"
     return resp
 
@@ -1117,6 +1131,10 @@ def _public_profile(d):
         out.pop(k, None)
     return out
 
+def _authorized():
+    given = request.args.get("secret") or request.headers.get("X-API-Key") or ""
+    return hmac.compare_digest(given.encode("utf-8"), API_SECRET.encode("utf-8"))
+
 def _error(msg, code):
     r = jsonify({"status": "error", "error": msg}); r.status_code = code
     r.headers["Cache-Control"] = "no-store"
@@ -1125,18 +1143,18 @@ def _error(msg, code):
 @app.route("/info", methods=["GET"])
 @app.route("/api/info", methods=["GET"])
 def api_info():
-    uid = (request.args.get("uid") or "").strip()
-    if not uid.isdigit() or not (5 <= len(uid) <= 14):
-        return _error("uid must be a number with 5 to 14 digits, e.g. /info?uid=123456789", 400)
     if not _rate_ok():
         return _error("Too many requests. Try again in a minute.", 429)
-    region = (request.args.get("region") or "").strip().upper() or None
-    if region and not REGION_RE.match(region): region = None
-    d = lookup_profile_auto(uid, hint=region)
+    if not _authorized():
+        return _error("Missing or wrong secret. Add &secret=YOUR_KEY (or send header X-API-Key).", 401)
+    uid = (request.args.get("uid") or request.args.get("infouid") or "").strip()
+    if not uid.isdigit() or not (5 <= len(uid) <= 14):
+        return _error("uid must be a number with 5 to 14 digits, e.g. /info?uid=123456789&secret=YOUR_KEY", 400)
+    d = lookup_profile_auto(uid, hint=ONLY_REGION)
     if "error" in d:
         return _error(d["error"], int(d.get("code") or 502))
     resp = jsonify({"status": "success", **_public_profile(d)})
-    resp.headers["Cache-Control"] = "public, s-maxage=60, stale-while-revalidate=300"
+    resp.headers["Cache-Control"] = "private, no-store"
     return resp
 
 @app.route("/api/item", methods=["GET"])
@@ -1152,6 +1170,8 @@ def api_item():
 
 @app.route("/api/health", methods=["GET"])
 def api_health():
+    if not _authorized():
+        return _error("Missing or wrong secret.", 401)
     return jsonify({"ok": True, "accounts_per_region": _accounts_per_region(),
                     "login_errors": dict(_login_errors),
                     "garena_rate_limit_seconds_left": int(_throttle_left())})
