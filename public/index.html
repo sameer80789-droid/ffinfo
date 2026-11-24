@@ -54,6 +54,9 @@ h1{margin:0;font:800 clamp(44px,8.5vw,84px)/.92 var(--display);letter-spacing:.0
 .field label{color:var(--steel);font-size:14px;margin-right:10px;white-space:nowrap}
 .field input{flex:1;min-width:0;border:0;background:none;padding:15px 4px;font:600 22px/1 var(--body);letter-spacing:.03em;outline:none}
 .field input::placeholder{color:var(--line);font-weight:500}
+.keyrow{max-width:620px;margin-top:10px}
+.keyrow[hidden]{display:none}
+.keyrow input{font-size:18px}
 .go{border:0;border-radius:12px;background:var(--ink);color:var(--paper);padding:0 26px;font-weight:600;cursor:pointer;min-height:56px}
 .go:hover{background:var(--signal);color:var(--signal-ink)}
 .go[disabled]{opacity:.55;cursor:progress}
@@ -151,7 +154,7 @@ footer{padding:0 0 40px;color:var(--steel);font-size:13px}
   <main>
     <section class="ask" aria-labelledby="h1">
       <h1 id="h1">Look up a Free Fire player</h1>
-      <p class="lede">Enter a UID to see name, level, rank, clan and outfit. The server region is found for you.</p>
+      <p class="lede">Enter a UID to see name, level, rank, clan and outfit. It searches the PK server.</p>
       <form class="form" id="form" autocomplete="off">
         <div class="field">
           <label for="uid">Player UID</label>
@@ -159,6 +162,10 @@ footer{padding:0 0 40px;color:var(--steel);font-size:13px}
         </div>
         <button class="go" id="go" type="submit">Look up</button>
       </form>
+      <div class="field keyrow" id="keyRow" hidden>
+        <label for="key">Access key</label>
+        <input id="key" type="password" autocomplete="off" placeholder="Enter your key">
+      </div>
       <div class="recent" id="recent" aria-label="Recent searches"></div>
     </section>
 
@@ -166,8 +173,8 @@ footer{padding:0 0 40px;color:var(--steel);font-size:13px}
 
     <section class="api" id="api" aria-labelledby="apiH">
       <h2 id="apiH">Use it as an API</h2>
-      <p>One request, one UID. The answer is JSON with the player's details and ready-to-use image links for avatar, banner and outfits.</p>
-      <div class="code"><span id="apiUrl">/info?uid=1234567890</span><button type="button" data-copy="apiUrl">Copy</button></div>
+      <p>One request with a UID and your key (as <code>secret</code> in the URL, or in the <code>X-API-Key</code> header). The answer is JSON with the player's details and ready-to-use image links for avatar, banner and outfits.</p>
+      <div class="code"><span id="apiUrl">/info?uid=1234567890&amp;secret=YOUR_KEY</span><button type="button" data-copy="apiUrl">Copy</button></div>
       <pre class="sample" id="sample">{
   "status": "success",
   "nickname": "…",
@@ -192,6 +199,10 @@ var $=function(s,r){return (r||document).querySelector(s)};
 var out=$('#out'), form=$('#form'), uidEl=$('#uid'), goBtn=$('#go'), recentEl=$('#recent'), toastEl=$('#toast');
 var ITEM='/api/item?id=';
 var lastData=null, busy=false;
+var keyRow=$('#key').parentNode, keyEl=$('#key');
+var KEY='';
+try{ KEY=localStorage.getItem('pl-key')||''; }catch(e){}
+(function(){ var s=new URLSearchParams(location.search).get('secret'); if(s){ KEY=s; try{localStorage.setItem('pl-key',s)}catch(e){} try{ var u=new URL(location.href); u.searchParams.delete('secret'); history.replaceState(null,'',u.pathname+u.search); }catch(e){} } })();
 
 /* ---- tiny DOM helper: text only, never innerHTML with data ---- */
 function h(tag,props,kids){
@@ -263,7 +274,7 @@ function showLoading(uid){
   out.appendChild(h('div',{class:'skel'},[
     h('div',{class:'s-ban'}),
     h('div',{class:'s-body'},[h('div',{class:'s-line',style:'width:40%;height:26px'}),h('div',{class:'s-line',style:'width:70%'}),h('div',{class:'s-line',style:'width:55%'})]),
-    h('p',{text:'Checking regions for UID '+uid+'. The first lookup can take up to 20 seconds.'})
+    h('p',{text:'Looking up UID '+uid+'. The first lookup can take up to 20 seconds.'})
   ]));
 }
 function showError(msg,hint){
@@ -323,7 +334,7 @@ function render(d){
   if((d.outfits||[]).length) kids.push(h('div',{class:'items'},[h('h2',{text:'Outfit'}),h('div',{class:'row'},d.outfits.map(function(o){return tile(o.id,'Outfit')}))]));
   if((d.weapon_skins||[]).length) kids.push(h('div',{class:'items'},[h('h2',{text:'Weapon skins'}),h('div',{class:'row'},d.weapon_skins.map(function(o){return tile(o.id,'Weapon skin')}))]));
 
-  var link=location.origin+'/info?uid='+d.uid;
+  var link=location.origin+'/info?uid='+d.uid+'&secret=YOUR_KEY';
   kids.push(h('div',{class:'foot'},[
     h('button',{type:'button',class:'btn solid',onclick:function(){copy(link,'API link copied')}},['Copy API link']),
     h('button',{type:'button',class:'btn',onclick:function(){copy(JSON.stringify(lastData,null,2),'JSON copied')}},['Copy JSON']),
@@ -339,17 +350,19 @@ function render(d){
 function search(uid){
   uid=String(uid||'').replace(/\D/g,'');
   if(uid.length<5){ showError('Enter a valid UID','A UID is a number with 5 to 14 digits.'); uidEl.focus(); return; }
+  if(!keyRow.hidden&&keyEl.value.trim()){ KEY=keyEl.value.trim(); try{localStorage.setItem('pl-key',KEY)}catch(e){} }
   if(busy)return; busy=true; goBtn.disabled=true; goBtn.textContent='Searching…';
   try{ history.replaceState(null,'','?uid='+uid); }catch(e){}
-  $('#apiUrl').textContent=location.origin+'/info?uid='+uid;
+  $('#apiUrl').textContent=location.origin+'/info?uid='+uid+'&secret=YOUR_KEY';
   showLoading(uid);
   var ctl=('AbortController' in window)?new AbortController():null;
   var timer=setTimeout(function(){ if(ctl)ctl.abort(); },40000);
-  fetch('/info?uid='+encodeURIComponent(uid),{headers:{Accept:'application/json'},signal:ctl?ctl.signal:undefined})
+  fetch('/info?uid='+encodeURIComponent(uid),{headers:KEY?{Accept:'application/json','X-API-Key':KEY}:{Accept:'application/json'},signal:ctl?ctl.signal:undefined})
     .then(function(r){ return r.json().catch(function(){return {status:'error',error:'The server sent an unreadable answer.'}}).then(function(j){return {r:r,j:j}}); })
     .then(function(x){
       if(x.r.ok&&x.j.status==='success'){ render(x.j); saveRecent(String(x.j.uid),x.j.nickname); }
-      else if(x.r.status===404) showError('Player not found','Check the UID for typos. Only UIDs from regions this tool can reach are found.');
+      else if(x.r.status===401){ keyRow.hidden=false; keyEl.focus(); showError(KEY?'That access key is not correct':'An access key is needed','Enter the key above, then look up again.'); }
+      else if(x.r.status===404) showError('Player not found','Check the UID for typos. This tool searches the PK server only.');
       else if(x.r.status===429) showError(x.j.error||'Too many requests','Wait a minute and try again.');
       else showError(x.j.error||'Lookup failed','The game server did not answer. Try again in a moment.');
     })
@@ -366,7 +379,7 @@ document.addEventListener('click',function(e){
   copy($('#'+b.getAttribute('data-copy')).textContent,'Copied');
 });
 
-$('#apiUrl').textContent=location.origin+'/info?uid=1234567890';
+$('#apiUrl').textContent=location.origin+'/info?uid=1234567890&secret=YOUR_KEY';
 renderRecent();
 var q=new URLSearchParams(location.search).get('uid');
 if(q&&/^\d{5,14}$/.test(q)){ uidEl.value=q; search(q); }
