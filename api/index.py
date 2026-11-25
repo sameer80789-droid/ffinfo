@@ -828,11 +828,16 @@ def build_profile(info, target_uid, region):
     credit = info.get("credit", {})
 
     # Same avatar/banner handling as before, so pictures look exactly as they did.
-    # Real avatar lives in Profile.avatar_id (field 2 -> 1). Basic.head_pic is just the default.
-    avatar_id = prof.get("avatar_id") or b.get("head_pic") or 102000007
-    banner_id = b.get("banner_id") or 902000172
-    if str(avatar_id).startswith("902"):  # safety: if the two ever come swapped
-        avatar_id, banner_id = banner_id, avatar_id
+    # Item id ranges seen in the game answer: 902xxxxxx = avatar (head pic), 901xxxxxx = banner.
+    # Pick by range so it stays right even if the two fields come in a different order.
+    cands = [b.get("head_pic"), b.get("banner_id")]
+    def _pick(prefix):
+        for c in cands:
+            if c and str(c).startswith(prefix):
+                return c
+        return None
+    avatar_id = _pick("902") or b.get("head_pic") or prof.get("avatar_id") or 102000007
+    banner_id = _pick("901") or b.get("banner_id") or 901000014
 
     clan_name = clan.get("name") or b.get("clan_name") or "No Clan"
     out = {
