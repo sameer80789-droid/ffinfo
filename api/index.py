@@ -785,9 +785,35 @@ def _clean_item_ids(ids):
             out.append(i)
     return out
 
+def _raw_dump(data, depth=0):
+    """Debug helper: show EVERY protobuf field (also the ones the schema does not know)."""
+    out = {}
+    for fn, wt, val in _walk_fields(data):
+        if wt == 2:
+            try:
+                txt = val.decode("utf-8")
+                if txt and txt.isprintable():
+                    v = txt
+                else:
+                    raise ValueError
+            except Exception:
+                v = None
+                if depth < 2 and val:
+                    sub = _raw_dump(val, depth + 1)
+                    if sub: v = sub
+                if v is None: v = val.hex()[:120]
+        else:
+            v = val
+        out.setdefault(str(fn), []).append(v)
+    return {k: (x[0] if len(x) == 1 else x) for k, x in out.items()}
+
 def parse_player_info(raw):
     """Raw GetPlayerPersonalShow bytes -> readable dict (None if the response is not a player)."""
     info = _pb_to_dict(raw, "Response")
+    try:
+        info["_raw"] = _raw_dump(raw)
+    except Exception:
+        pass
     basic = info.get("basic") or {}
     if not basic.get("nickname") and not basic.get("account_id"):
         return None
@@ -840,6 +866,7 @@ def build_profile(info, target_uid, region):
         "outfit_ids": _clean_item_ids(prof.get("clothes")),
         "weapon_skin_ids": _clean_item_ids(b.get("weapon_skins")),
         "skill_ids": prof.get("equipped_skills", []),
+        "_raw": info.get("_raw"),
     }
     if clan:
         out["clan"] = {"level": clan.get("level", 0), "members": clan.get("members", 0),
@@ -1143,6 +1170,10 @@ def _public_profile(d):
     out["weapon_skins"] = [{"id": i, "url": item_url(i)} for i in d.get("weapon_skin_ids", [])]
     for k in ("searched_via",):
         out.pop(k, None)
+    if request.args.get("debug") == "1":
+        out["debug_raw"] = out.pop("_raw", None)   # every raw field of the game answer
+    else:
+        out.pop("_raw", None)
     return out
 
 def _authorized():
