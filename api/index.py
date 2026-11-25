@@ -88,8 +88,6 @@ REGION_LANG = {
 # LEADERBOARD PAYLOAD REGION MAP
 # EU   → SG   (EU served by Singapore cluster)
 # CIS  → SG   (CIS served by Singapore cluster)
-# Source: Free Fire Community API docs — "SG Region covers SG, ID, ME,
-#         VN, TH, CIS, EU, TW, MY, PK, BD"
 # =====================================================================
 REGION_PAYLOAD_MAP = {
     "EU":  "SG",
@@ -103,7 +101,6 @@ REGION_ALT_PAYLOAD_CODES = {
 
 # =====================================================================
 # GAME SERVER CANDIDATES
-# Sirf woh servers jo DNS resolve karte hain — dead URLs hata diye.
 # =====================================================================
 REGION_GAME_SERVER_CANDIDATES = {
     "IND": [
@@ -270,8 +267,6 @@ def version_config(region="BD", force=False):
         return result
 
 # ==================== AUTH ====================
-# Garena answers HTTP 429 error_too_many_requests when this server's IP asks for too many guest tokens.
-# Every extra try while blocked only makes it worse, so ONE 429 pauses ALL logins for a while.
 _token_block = {"until": 0.0, "streak": 0}
 THROTTLE_BASE = 300          # 5 min, doubles on every further 429 in a row, max 30 min
 
@@ -315,8 +310,6 @@ def get_access_token(uid, password, region=""):
     _login_errors[region] = f"guest token grant failed: {why}"
     return None
 
-# The real game client puts its own public IP into the login request. A fixed foreign IP next to a
-# datacenter connection looks fake, so use the server's real egress IP (cached). FF_EGRESS_IP overrides.
 _egress = {"ip": None, "t": 0}
 _IP_RE = re.compile(r"^\d{1,3}(\.\d{1,3}){3}$")
 def _egress_ip():
@@ -331,7 +324,7 @@ def _egress_ip():
             return ip
     except Exception as e:
         log.warning("egress ip lookup failed: %s", e)
-    _egress.update(ip="104.28.197.151", t=time.time() - 3000)   # old constant, retry lookup in ~10 min
+    _egress.update(ip="104.28.197.151", t=time.time() - 3000)
     return _egress["ip"]
 
 def get_payload(access_token, open_id, platform, game_version, region="PK", lang_code=None):
@@ -374,10 +367,9 @@ def get_payload(access_token, open_id, platform, game_version, region="PK", lang
     }
     return bytes.fromhex(encrypt_aes(create_proto(major_login).hex()))
 
-_login_errors = {}            # region -> last MajorLogin failure description (shown on /healthz)
+_login_errors = {}
 
 def _describe_resp(content):
-    """Short, secret-free description of a server reply, so a failed login can be diagnosed from logs."""
     try:
         d = decode_protobuf(content) or {}
     except Exception:
@@ -450,7 +442,7 @@ def load_accounts():
             raw_env = os.environ.get("FF_ACCOUNTS_JSON", "").strip()
             data = json.loads(raw_env) if raw_env else list(DEFAULT_ACCOUNTS)
             if not isinstance(data, list): data = [data]
-            data = [a for a in data if str(a.get("region", ONLY_REGION)).upper() == ONLY_REGION]   # one server only
+            data = [a for a in data if str(a.get("region", ONLY_REGION)).upper() == ONLY_REGION]
             _accounts_cache["data"] = data
             _accounts_cache["t"] = time.time()
             log.info("Loaded %d accounts (pid %d)", len(data), os.getpid())
@@ -485,7 +477,7 @@ def default_region():
     return str(accounts[0].get("region", "PK")).upper()
 
 # ==================== SESSION CACHE ====================
-_session_cache = {}           # region -> (jwt, game_server_or_None, ts)
+_session_cache = {}
 _session_lock = threading.Lock()
 _auth_locks = {}
 _auth_locks_guard = threading.Lock()
@@ -510,7 +502,6 @@ _global_login_lock = threading.Lock()
 _global_last_login = [0.0]
 
 def _set_cooldown(region):
-    """Cooldown doubles with every failed login in a row (30s, 60s, 120s ... max 10 min)."""
     with _cooldown_lock:
         n = _login_fail_streak.get(region, 0)
         _login_fail_streak[region] = n + 1
@@ -522,7 +513,6 @@ def _clear_fail_streak(region):
         _login_cooldown.pop(region, None)
 
 def _global_login_gate():
-    """All regions log in from ONE server IP. Never send a burst: keep a small gap between any two logins."""
     with _global_login_lock:
         wait = GLOBAL_LOGIN_GAP - (time.time() - _global_last_login[0])
         if wait > 0:
@@ -534,7 +524,6 @@ def _mark_login(region):
         _last_login_at[region] = time.time()
 
 def _extract_game_server(res, region=""):
-    """JWT field 10 se game server lo — lekin region ke candidates hain to None."""
     v = res.get("10")
     if isinstance(v, dict) and "data" in v:
         url = v["data"]
@@ -548,7 +537,6 @@ def _extract_game_server(res, region=""):
     return FALLBACK_GAME_SERVER
 
 def _jwt_claims(jwt):
-    """Non-secret claims of the JWT, only for the log (which region / server the token belongs to)."""
     try:
         part = str(jwt).split(".")[1]
         j = json.loads(base64.urlsafe_b64decode(part + "=" * (-len(part) % 4)))
@@ -559,8 +547,6 @@ def _jwt_claims(jwt):
 def get_session(region, force=False):
     region = str(region).upper()
 
-    # A token that was issued a moment ago and is still refused is not "expired": logging in again
-    # right away gives the same answer and only burns rate limit. Keep it, the caller tries other servers.
     if force:
         with _session_lock:
             hit = _session_cache.get(region)
@@ -630,13 +616,12 @@ def get_session(region, force=False):
                 log.warning("MajorLogin FAILED for %s uid=%s (try %d/%d)",
                             region, acc["uid"], attempt, LOGIN_ATTEMPTS)
             if _throttle_left() > 0:
-                break          # Garena said 429: stop at once, every extra request prolongs the block
+                break
             if token_ok and sum(1 for a in load_accounts()
                                 if str(a.get("region", "")).upper() == region) < 2:
-                break          # Garena answered, just not with a JWT: repeating the same request only adds load
+                break
             if attempt < LOGIN_ATTEMPTS:
                 time.sleep(3 * attempt)
-                # try the next account of this region, if there is one
                 acc = next_account(region) or acc
         if not res or "8" not in res:
             _set_cooldown(region)
@@ -658,11 +643,6 @@ def get_session(region, force=False):
         return jwt, game_server, None
 
 # ==================== PLAYER INFO (GetPlayerPersonalShow) ====================
-# Layout taken from the FreeFire-Api project's PlayerPersonalShow.proto, written out by hand so no
-# protobuf library is needed. Each entry is: field number -> (name, type).
-#   int / bool / str     plain values
-#   rep_int              list of numbers (packed or not)
-#   msg:<Name>           nested message      rep_msg:<Name>   list of nested messages
 _PS = {
     "Response": {
         1: ("basic", "msg:Basic"), 2: ("profile", "msg:Profile"), 3: ("leaderboard_pos", "int"),
@@ -724,7 +704,6 @@ _SOCIAL_TAGS = {2101: "Fashion", 2102: "Social", 2103: "Veteran", 2104: "Newbie"
                 2106: "Plays for fun", 2107: "Voice on", 2108: "Voice off"}
 
 def _walk_fields(data):
-    """Yield (field_number, wire_type, value) from raw protobuf bytes."""
     offset = 0
     while offset < len(data):
         header, offset = decode_varint(data, offset)
@@ -744,7 +723,6 @@ def _walk_fields(data):
         else: return
 
 def _pb_to_dict(data, msg_name):
-    """Decode bytes into a dict using the _PS schema. Unknown fields are ignored."""
     schema = _PS[msg_name]
     out = {}
     for fn, wt, val in _walk_fields(data):
@@ -761,7 +739,7 @@ def _pb_to_dict(data, msg_name):
             lst = out.setdefault(name, [])
             if wt == 0:
                 lst.append(val)
-            elif wt == 2:                      # packed list
+            elif wt == 2:
                 pos = 0
                 while pos < len(val):
                     num, pos = decode_varint(val, pos)
@@ -787,7 +765,6 @@ def _clean_item_ids(ids):
     return out
 
 def parse_player_info(raw):
-    """Raw GetPlayerPersonalShow bytes -> readable dict (None if the response is not a player)."""
     info = _pb_to_dict(raw, "Response")
     basic = info.get("basic") or {}
     if not basic.get("nickname") and not basic.get("account_id"):
@@ -802,11 +779,11 @@ def build_profile(info, target_uid, region):
     pet = info.get("pet", {})
     credit = info.get("credit", {})
 
-    # Same avatar/banner handling as before, so pictures look exactly as they did.
-    avatar_id = b.get("banner_id") or 102000007
-    banner_id = b.get("head_pic") or 902000172
-    if str(avatar_id).startswith("902"):
-        avatar_id, banner_id = banner_id, avatar_id
+    # ---- CORRECT Free Fire profile image mapping ----
+    #   field 11 -> banner_id  -> 901xxxxxx   (profile banner)
+    #   field 12 -> head_pic   -> 902xxxxxx   (profile avatar / head picture)
+    avatar_id = b.get("head_pic") or 0
+    banner_id = b.get("banner_id") or 0
 
     clan_name = clan.get("name") or b.get("clan_name") or "No Clan"
     out = {
@@ -866,7 +843,7 @@ def search_player_profile(target_uid, region, jwt_token, game_server):
     bodies = []
     if INFO_CALLSIGN:
         bodies.append({"1": int(target_uid), "2": INFO_CALLSIGN})
-    bodies.append({"1": int(target_uid)})          # old style request, used if the new one is refused
+    bodies.append({"1": int(target_uid)})
     try:
         r = None
         for fields in bodies:
@@ -916,8 +893,8 @@ def lookup_profile_cached(uid, region):
 # ==================== REGION AUTO-DETECT ====================
 REGION_RE = re.compile(r"^[A-Za-z]{2,4}$")
 REGION_HINT_TTL = 60 * 60
-SEARCH_BUDGET = float(os.environ.get("FF_SEARCH_BUDGET", "24"))   # seconds, stays below the function limit
-_region_hint = {}            # uid -> (region, saved_at)
+SEARCH_BUDGET = float(os.environ.get("FF_SEARCH_BUDGET", "24"))
+_region_hint = {}
 _region_hint_lock = threading.Lock()
 
 def _account_regions():
@@ -941,9 +918,6 @@ def _finish_auto(d, found_region):
     return d
 
 def lookup_profile_auto(uid, hint=None):
-    """Find a player without knowing the region.
-    Order: remembered region, requested region, regions that already have a live login (free),
-    then the remaining regions one at a time (each needs a login, so never in a burst)."""
     uid = str(uid).strip()
     regions = _account_regions()
     if not regions:
@@ -966,7 +940,6 @@ def lookup_profile_auto(uid, hint=None):
         d = lookup_profile_cached(uid, r)
         return d if isinstance(d, dict) else {"error": "Unknown error"}
 
-    # 1) the most likely region, on its own
     d = try_region(order[0])
     if _profile_ok(d):
         return _finish_auto(dict(d), order[0])
@@ -975,7 +948,6 @@ def lookup_profile_auto(uid, hint=None):
     def stop_now():
         return any("rate limit" in e.lower() for e in errors.values())
 
-    # 2) regions that are already logged in: parallel, costs no login
     warm = [r for r in order[1:] if _has_session(r)]
     if warm and not stop_now():
         with ThreadPoolExecutor(max_workers=min(4, len(warm))) as pool:
@@ -989,7 +961,6 @@ def lookup_profile_auto(uid, hint=None):
                     return _finish_auto(dict(d), r)
                 errors[r] = d.get("error", "Unknown error")
 
-    # 3) cold regions: one at a time, until the time budget is used
     for r in order[1:]:
         if r in errors or stop_now() or time.time() > deadline:
             continue
@@ -1013,14 +984,13 @@ def lookup_profile_auto(uid, hint=None):
 
 # ==================== ITEM IMAGES (avatar / banner / outfit) ====================
 ITEM_API = os.environ.get("FF_ITEM_API", "https://getitems.thug4ff.xyz/item").strip()
-_item_http = requests.Session()        # separate session, normal TLS checking
+_item_http = requests.Session()
 _IMG_EXT = re.compile(r"\.(png|jpe?g|webp|gif)(\?|$)", re.I)
 
 def item_url(item_id):
     return f"{ITEM_API}?id={int(item_id)}" if item_id else ""
 
 def _public_https(url):
-    """Only follow plain public https URLs (no IP literals / localhost) when an API answers with a link."""
     try:
         u = urlparse(url)
         if u.scheme != "https" or not u.hostname or u.hostname == "localhost":
@@ -1033,7 +1003,6 @@ def _public_https(url):
         return False
 
 def _find_image_ref(obj, depth=0):
-    """Look through a JSON answer for an image link or a base64 image."""
     if depth > 4: return None
     if isinstance(obj, str):
         if obj.startswith("data:image/"): return obj
@@ -1070,7 +1039,7 @@ def _image_from(url, timeout=6):
                 return r2.content, ct2
     return None
 
-_item_cache = {}          # id -> (bytes, content_type, saved_at)
+_item_cache = {}
 _item_lock = threading.Lock()
 
 def get_item_image(item_id):
@@ -1121,7 +1090,6 @@ def _cors(resp):
     return resp
 
 def _public_profile(d):
-    """Profile + ready-to-use image links."""
     out = dict(d)
     out["avatar_url"] = item_url(d.get("avatar_id"))
     out["banner_url"] = item_url(d.get("banner_id"))
