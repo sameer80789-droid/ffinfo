@@ -1,11 +1,7 @@
 {
   "functions": {
-    "api/index.py": { "maxDuration": 30 }
+    "api/index.py": { "maxDuration": 30, "includeFiles": "public/**" }
   },
-  "rewrites": [
-    { "source": "/info", "destination": "/api/index" },
-    { "source": "/api/(.*)", "destination": "/api/index" }
-  ],
   "headers": [
     {
       "source": "/(.*)",
